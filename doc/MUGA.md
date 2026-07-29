@@ -13,7 +13,7 @@ https://www.qianwen.com/share/chat/2463add048e04015921d2211a17ff10f
 https://yb.tencent.com/s/XelinymwfbD2  
 
 ## 为什么是jiuwen？
-不可说。先用着（https://gitcode.com/whylazy/agent-core-java）。
+不可说。先用着： https://gitcode.com/whylazy/agent-core-java
 
 ## 结论
 如果能让AI Agent嵌入RouYi，那么它可以嵌入绝大多数服务系统。
