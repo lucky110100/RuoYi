@@ -53,6 +53,12 @@
             <artifactId>ruoyi-generator</artifactId>
         </dependency>
 
+        <!-- AI辅助模块-->
+        <dependency>
+            <groupId>com.ruoyi</groupId>
+            <artifactId>ruoyi-ai</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

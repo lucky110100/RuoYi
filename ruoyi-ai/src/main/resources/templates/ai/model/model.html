@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh" xmlns:th="http://www.thymeleaf.org" xmlns:shiro="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('LLM 模型管理')" />
+</head>
+<body class="gray-bg">
+    <div class="container-div">
+        <div class="row">
+            <div class="col-sm-12 search-collapse">
+                <form id="model-form">
+                    <div class="select-list">
+                        <ul>
+                            <li>
+                                模型名称：<input type="text" name="modelName"/>
+                            </li>
+                            <li>
+                                提供方：<input type="text" name="modelProvider"/>
+                            </li>
+                            <li>
+                                状态：<select name="status">
+                                    <option value="">所有</option>
+                                    <option value="0">启用</option>
+                                    <option value="1">停用</option>
+                                </select>
+                            </li>
+                            <li>
+                                <a class="btn btn-primary btn-rounded btn-sm" onclick="$.table.search()"><i class="fa fa-search"></i>&nbsp;搜索</a>
+                                <a class="btn btn-warning btn-rounded btn-sm" onclick="$.form.reset()"><i class="fa fa-refresh"></i>&nbsp;重置</a>
+                            </li>
+                        </ul>
+                    </div>
+                </form>
+            </div>
+
+            <div class="btn-group-sm" id="toolbar" role="group">
+                <a class="btn btn-success" onclick="$.operate.add()" shiro:hasPermission="ai:model:add">
+                    <i class="fa fa-plus"></i> 新增
+                </a>
+                <a class="btn btn-primary single disabled" onclick="$.operate.edit()" shiro:hasPermission="ai:model:edit">
+                    <i class="fa fa-edit"></i> 修改
+                </a>
+                <a class="btn btn-danger multiple disabled" onclick="$.operate.removeAll()" shiro:hasPermission="ai:model:remove">
+                    <i class="fa fa-remove"></i> 删除
+                </a>
+            </div>
+            <div class="col-sm-12 select-table table-striped">
+                <table id="bootstrap-table"></table>
+            </div>
+        </div>
+    </div>
+    <th:block th:include="include :: footer" />
+    <script th:inline="javascript">
+        var editFlag = [[${@permission.hasPermi('ai:model:edit')}]];
+        var removeFlag = [[${@permission.hasPermi('ai:model:remove')}]];
+        var testFlag = [[${@permission.hasPermi('ai:model:test')}]];
+        var prefix = ctx + "ai/models";
+
+        var statusDatas = [{'dictValue':'0','dictLabel':'启用'},{'dictValue':'1','dictLabel':'停用'}];
+        var defaultDatas = [{'dictValue':'Y','dictLabel':'是'},{'dictValue':'N','dictLabel':'否'}];
+        var sslDatas = [{'dictValue':'0','dictLabel':'否'},{'dictValue':'1','dictLabel':'是'}];
+
+        $(function() {
+            var options = {
+                url: prefix + "/list",
+                createUrl: prefix + "/add",
+                updateUrl: prefix + "/edit/{id}",
+                removeUrl: prefix + "/remove",
+                sortName: "sortOrder",
+                sortOrder: "asc",
+                modalName: "LLM模型",
+                columns: [{
+                    checkbox: true
+                },
+                {
+                    field: 'modelId',
+                    title: '主键'
+                },
+                {
+                    field: 'modelName',
+                    title: '模型名称'
+                },
+                {
+                    field: 'modelType',
+                    title: '类型'
+                },
+                {
+                    field: 'modelVersion',
+                    title: '版本'
+                },
+                {
+                    field: 'modelProvider',
+                    title: '提供方'
+                },
+                {
+                    field: 'apiBase',
+                    title: 'API基地址',
+                    formatter: function(value, row, index) {
+                        return $.table.tooltip(value, 20, "open");
+                    }
+                },
+                {
+                    field: 'status',
+                    title: '状态',
+                    align: 'center',
+                    formatter: function(value, row, index) {
+                        return $.table.selectDictLabel(statusDatas, value);
+                    }
+                },
+                {
+                    field: 'isDefault',
+                    title: '默认',
+                    align: 'center',
+                    formatter: function(value, row, index) {
+                        return $.table.selectDictLabel(defaultDatas, value);
+                    }
+                },
+                {
+                    field: 'sortOrder',
+                    title: '排序'
+                },
+                {
+                    title: '操作',
+                    align: 'center',
+                    formatter: function(value, row, index) {
+                        var actions = [];
+                        actions.push('<a class="btn btn-success btn-xs ' + editFlag + '" href="javascript:void(0)" onclick="$.operate.edit(\'' + row.modelId + '\')"><i class="fa fa-edit"></i>编辑</a> ');
+                        actions.push('<a class="btn btn-info btn-xs ' + testFlag + '" href="javascript:void(0)" onclick="testConnectById(\'' + row.modelId + '\')"><i class="fa fa-plug"></i>测试</a> ');
+                        actions.push('<a class="btn btn-danger btn-xs ' + removeFlag + '" href="javascript:void(0)" onclick="$.operate.remove(\'' + row.modelId + '\')"><i class="fa fa-remove"></i>删除</a>');
+                        return actions.join('');
+                    }
+                }]
+            };
+            $.table.init(options);
+        });
+
+        /** 行内"测试连通"按钮：按 id 测试已保存模型 */
+        function testConnectById(modelId) {
+            $.modal.loading("正在测试连通...");
+            $.ajax({
+                url: prefix + "/test/" + modelId,
+                type: "POST",
+                success: function(resp) {
+                    $.modal.closeLoading();
+                    if (resp.code === 0) {
+                        $.modal.alertSuccess(resp.msg + "\n\n回复样例：\n" + (resp.reply || ''));
+                    } else {
+                        $.modal.alertError(resp.msg);
+                    }
+                },
+                error: function() {
+                    $.modal.closeLoading();
+                    $.modal.alertError("请求失败");
+                }
+            });
+        }
+    </script>
+</body>
+</html>

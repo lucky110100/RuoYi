@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.ai.mapper.SysAiModelMapper">
+
+    <resultMap type="SysAiModel" id="SysAiModelResult">
+        <id     property="modelId"        column="model_id"        />
+        <result property="modelName"      column="model_name"      />
+        <result property="modelType"      column="model_type"      />
+        <result property="modelVersion"   column="model_version"   />
+        <result property="modelProvider"  column="model_provider"  />
+        <result property="apiBase"        column="api_base"        />
+        <result property="apiKey"         column="api_key"         />
+        <result property="sslVerify"      column="ssl_verify"      />
+        <result property="status"         column="status"          />
+        <result property="isDefault"      column="is_default"      />
+        <result property="sortOrder"      column="sort_order"      />
+        <result property="createBy"       column="create_by"        />
+        <result property="createTime"     column="create_time"     />
+        <result property="updateBy"       column="update_by"       />
+        <result property="updateTime"    column="update_time"      />
+        <result property="remark"         column="remark"          />
+    </resultMap>
+
+    <sql id="selectModelVo">
+        select model_id, model_name, model_type, model_version, model_provider,
+               api_base, api_key, ssl_verify, status, is_default, sort_order,
+               create_by, create_time, update_by, update_time, remark
+        from sys_ai_model
+    </sql>
+
+    <select id="selectModelById" parameterType="Long" resultMap="SysAiModelResult">
+        <include refid="selectModelVo"/>
+        where model_id = #{modelId}
+    </select>
+
+    <select id="selectDefaultModel" resultMap="SysAiModelResult">
+        <include refid="selectModelVo"/>
+        where is_default = 'Y' and status = '0' limit 1
+    </select>
+
+    <select id="selectEnabledModels" resultMap="SysAiModelResult">
+        <include refid="selectModelVo"/>
+        where status = '0'
+        order by sort_order asc, model_id asc
+    </select>
+
+    <select id="selectModelList" parameterType="SysAiModel" resultMap="SysAiModelResult">
+        <include refid="selectModelVo"/>
+        <where>
+            <if test="modelName != null and modelName != ''">
+                AND model_name like concat('%', #{modelName}, '%')
+            </if>
+            <if test="modelType != null and modelType != ''">
+                AND model_type = #{modelType}
+            </if>
+            <if test="modelProvider != null and modelProvider != ''">
+                AND model_provider like concat('%', #{modelProvider}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="isDefault != null and isDefault != ''">
+                AND is_default = #{isDefault}
+            </if>
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and date_format(create_time,'%Y%m%d') &gt;= date_format(#{params.beginTime},'%Y%m%d')
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and date_format(create_time,'%Y%m%d') &lt;= date_format(#{params.endTime},'%Y%m%d')
+            </if>
+        </where>
+        order by sort_order asc, model_id asc
+    </select>
+
+    <select id="checkModelNameUnique" parameterType="String" resultMap="SysAiModelResult">
+        <include refid="selectModelVo"/>
+        where model_name = #{modelName} limit 1
+    </select>
+
+    <insert id="insertModel" parameterType="SysAiModel" useGeneratedKeys="true" keyProperty="modelId">
+        insert into sys_ai_model (
+            <if test="modelName != null and modelName != ''">model_name,</if>
+            <if test="modelType != null and modelType != ''">model_type,</if>
+            <if test="modelVersion != null and modelVersion != ''">model_version,</if>
+            <if test="modelProvider != null and modelProvider != ''">model_provider,</if>
+            <if test="apiBase != null and apiBase != ''">api_base,</if>
+            <if test="apiKey != null and apiKey != ''">api_key,</if>
+            <if test="sslVerify != null and sslVerify != ''">ssl_verify,</if>
+            <if test="status != null and status != ''">status,</if>
+            <if test="isDefault != null and isDefault != ''">is_default,</if>
+            <if test="sortOrder != null">sort_order,</if>
+            <if test="createBy != null and createBy != ''">create_by,</if>
+            <if test="remark != null and remark != ''">remark,</if>
+            create_time
+        )values(
+            <if test="modelName != null and modelName != ''">#{modelName},</if>
+            <if test="modelType != null and modelType != ''">#{modelType},</if>
+            <if test="modelVersion != null and modelVersion != ''">#{modelVersion},</if>
+            <if test="modelProvider != null and modelProvider != ''">#{modelProvider},</if>
+            <if test="apiBase != null and apiBase != ''">#{apiBase},</if>
+            <if test="apiKey != null and apiKey != ''">#{apiKey},</if>
+            <if test="sslVerify != null and sslVerify != ''">#{sslVerify},</if>
+            <if test="status != null and status != ''">#{status},</if>
+            <if test="isDefault != null and isDefault != ''">#{isDefault},</if>
+            <if test="sortOrder != null">#{sortOrder},</if>
+            <if test="createBy != null and createBy != ''">#{createBy},</if>
+            <if test="remark != null and remark != ''">#{remark},</if>
+            sysdate()
+        )
+    </insert>
+
+    <update id="updateModel" parameterType="SysAiModel">
+        update sys_ai_model
+        <set>
+            <if test="modelName != null and modelName != ''">model_name = #{modelName},</if>
+            <if test="modelType != null">model_type = #{modelType},</if>
+            <if test="modelVersion != null">model_version = #{modelVersion},</if>
+            <if test="modelProvider != null and modelProvider != ''">model_provider = #{modelProvider},</if>
+            <if test="apiBase != null and apiBase != ''">api_base = #{apiBase},</if>
+            <if test="apiKey != null and apiKey != ''">api_key = #{apiKey},</if>
+            <if test="sslVerify != null and sslVerify != ''">ssl_verify = #{sslVerify},</if>
+            <if test="status != null and status != ''">status = #{status},</if>
+            <if test="isDefault != null and isDefault != ''">is_default = #{isDefault},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </set>
+        where model_id = #{modelId}
+    </update>
+
+    <update id="clearDefaultFlag">
+        update sys_ai_model set is_default = 'N', update_time = sysdate()
+        where is_default = 'Y'
+    </update>
+
+    <delete id="deleteModelById" parameterType="Long">
+        delete from sys_ai_model where model_id = #{modelId}
+    </delete>
+
+    <delete id="deleteModelByIds" parameterType="String">
+        delete from sys_ai_model where model_id in
+        <foreach item="modelId" collection="array" open="(" separator="," close=")">
+            #{modelId}
+        </foreach>
+    </delete>
+
+</mapper>

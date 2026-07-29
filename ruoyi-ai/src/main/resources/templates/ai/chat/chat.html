@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('AI 辅助')" />
+    <style>
+        .chat-container { display: flex; flex-direction: column; height: calc(100vh - 130px); min-height: 500px; }
+        .chat-messages {
+            flex: 1; overflow-y: auto; padding: 15px; background: #f9f9f9;
+            border: 1px solid #e7eaec; border-radius: 4px; margin-bottom: 10px;
+        }
+        .chat-msg { margin-bottom: 12px; padding: 10px 14px; border-radius: 6px; max-width: 85%; word-wrap: break-word; white-space: pre-wrap; line-height: 1.6; }
+        .chat-msg.user { background: #1ab394; color: #fff; margin-left: auto; text-align: right; }
+        .chat-msg.agent { background: #fff; color: #333; border: 1px solid #e7eaec; }
+        .chat-msg.error { background: #fce4e4; color: #c0392b; border: 1px solid #e74c3c; }
+        .chat-input-row { display: flex; gap: 8px; align-items: flex-end; }
+        .chat-input-row textarea { flex: 1; resize: none; min-height: 60px; max-height: 200px; }
+        .chat-meta { font-size: 12px; color: #999; margin-bottom: 4px; }
+        .typing-indicator { color: #999; font-style: italic; }
+    </style>
+</head>
+<body class="gray-bg">
+    <div class="wrapper wrapper-content">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="ibox float-e-margins">
+                    <div class="ibox-title">
+                        <h5>AI 辅助</h5>
+                        <div class="ibox-tools">
+                            <label style="margin-right:6px;font-weight:normal;">模型：</label>
+                            <select id="modelSelect" class="form-control input-sm" style="min-width:200px;display:inline-block;">
+                                <option value="">加载中...</option>
+                            </select>
+                            <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
+                        </div>
+                    </div>
+                    <div class="ibox-content">
+                        <div class="chat-container">
+                            <div id="chatMessages" class="chat-messages">
+                                <div class="chat-msg agent">
+                                    <div class="chat-meta">AI 助手</div>
+                                    你好！我是 AI 助手，可以帮你查询信息、回答问题。例如：查询深圳天气。
+                                </div>
+                            </div>
+                            <div class="chat-input-row">
+                                <textarea id="queryInput" class="form-control"
+                                          placeholder="请输入你的问题，例如：查询深圳天气"
+                                          onkeydown="handleKeyDown(event)"></textarea>
+                                <button type="button" class="btn btn-primary" onclick="sendMessage()">
+                                    <i class="fa fa-paper-plane"></i> 发送
+                                </button>
+                                <button type="button" class="btn btn-default" onclick="clearChat()">
+                                    <i class="fa fa-eraser"></i> 清屏
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <th:block th:include="include :: footer" />
+
+    <script th:inline="javascript">
+        var chatSendUrl = /*[[@{/ai/chat/send}]]*/ '/ai/chat/send';
+        var chatStreamUrl = /*[[@{/ai/chat/stream}]]*/ '/ai/chat/stream';
+        var chatModelsUrl = /*[[@{/ai/chat/models}]]*/ '/ai/chat/models';
+        var conversationId = '';
+        var currentModelId = '';
+        var streaming = false;
+
+        function loadModels() {
+            $.get(chatModelsUrl, function(resp) {
+                var $sel = $('#modelSelect').empty();
+                var list = (resp && resp.data) || [];
+                if (list.length === 0) {
+                    $sel.append('<option value="">无可用模型</option>');
+                    $.modal.alertWarning('无可用模型，请到 Models 菜单配置');
+                    return;
+                }
+                list.forEach(function(m) {
+                    var label = m.modelName + (m.modelVersion ? ' (' + m.modelVersion + ')' : '');
+                    if (m.isDefault === 'Y') { label = '★ ' + label; }
+                    $sel.append('<option value="' + m.modelId + '">' + label + '</option>');
+                });
+                // 优先 localStorage 记忆，否则取默认模型，否则第一个
+                var saved = localStorage.getItem('aiChatModelId');
+                if (saved && $sel.find('option[value="' + saved + '"]').length) {
+                    $sel.val(saved);
+                } else {
+                    var def = list.find(function(m){ return m.isDefault === 'Y'; });
+                    $sel.val(def ? def.modelId : list[0].modelId);
+                }
+                currentModelId = $sel.val();
+            });
+        }
+
+        function appendMessage(role, text) {
+            var $box = $('#chatMessages');
+            var cls = role === 'user' ? 'user' : (role === 'error' ? 'error' : 'agent');
+            var label = role === 'user' ? '我' : (role === 'error' ? '错误' : 'AI 助手');
+            var $msg = $('<div class="chat-msg ' + cls + '"></div>')
+                .append($('<div class="chat-meta"></div>').text(label + ' · ' + formatTime()))
+                .append($('<div></div>').text(text));
+            $box.append($msg);
+            $box.scrollTop($box[0].scrollHeight);
+            return $msg;
+        }
+
+        function appendTyping() {
+            var $box = $('#chatMessages');
+            var $msg = $('<div class="chat-msg agent" id="typingMsg"></div>')
+                .append($('<div class="chat-meta"></div>').text('AI 助手 · 思考中...'))
+                .append($('<div class="typing-indicator"></div>').text('正在思考，请稍候...'));
+            $box.append($msg);
+            $box.scrollTop($box[0].scrollHeight);
+        }
+
+        function removeTyping() {
+            $('#typingMsg').remove();
+        }
+
+        function formatTime() {
+            var d = new Date();
+            return d.getHours().toString().padStart(2, '0') + ':' +
+                   d.getMinutes().toString().padStart(2, '0') + ':' +
+                   d.getSeconds().toString().padStart(2, '0');
+        }
+
+        function sendMessage() {
+            var query = $('#queryInput').val().trim();
+            if (!query) {
+                $.modal.alertWarning('请输入提问内容');
+                return;
+            }
+            var modelId = $('#modelSelect').val();
+            if (!modelId) {
+                $.modal.alertWarning('请先选择模型');
+                return;
+            }
+            if (streaming) {
+                $.modal.alertWarning('当前对话正在生成，请等待结束');
+                return;
+            }
+            appendMessage('user', query);
+            $('#queryInput').val('').height('auto');
+            streamSend(query, modelId);
+        }
+
+        // 流式发送：POST fetch + ReadableStream 解析 SSE
+        function streamSend(query, modelId) {
+            streaming = true;
+            var $agentMsg = appendMessage('agent', '');
+            var $agentContent = $agentMsg.find('div').last();
+            var $meta = $agentMsg.find('.chat-meta');
+            $meta.text('AI 助手 · 生成中...');
+            appendTyping(); // 占位，等待首个 chunk 到达后移除
+
+            // 累计文本：把 chunk 按顺序 append 到同一元素
+            var buffer = '';
+            var sseBuffer = ''; // SSE 解析缓冲区
+            var firstChunk = true;
+
+            fetch(chatStreamUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'query=' + encodeURIComponent(query)
+                    + '&conversationId=' + encodeURIComponent(conversationId)
+                    + '&modelId=' + encodeURIComponent(modelId)
+            }).then(function (resp) {
+                if (!resp.ok) {
+                    throw new Error('HTTP ' + resp.status);
+                }
+                var reader = resp.body.getReader();
+                var decoder = new TextDecoder('utf-8');
+                function pump() {
+                    reader.read().then(function (out) {
+                        if (out.done) {
+                            finishStream();
+                            return;
+                        }
+                        sseBuffer += decoder.decode(out.value, { stream: true });
+                        // SSE 事件之间用 \n\n 分隔；按分隔符切出完整事件
+                        var idx;
+                        while ((idx = sseBuffer.indexOf('\n\n')) >= 0) {
+                            var rawEvent = sseBuffer.slice(0, idx);
+                            sseBuffer = sseBuffer.slice(idx + 2);
+                            handleSseEvent(rawEvent, $agentContent, $meta, function (full) {
+                                buffer = full;
+                            }, function () {
+                                firstChunk = false;
+                                removeTyping();
+                            });
+                        }
+                        pump();
+                    }).catch(function (err) {
+                        finishStream('网络异常：' + (err.message || '读取失败'));
+                    });
+                }
+                pump();
+            }).catch(function (err) {
+                finishStream('请求失败：' + (err.message || err));
+            });
+
+            function finishStream(errMsg) {
+                streaming = false;
+                removeTyping();
+                if (errMsg) {
+                    $meta.text('AI 助手 · 错误 · ' + formatTime());
+                    $agentContent.text(errMsg);
+                    $agentMsg.removeClass('agent').addClass('error');
+                } else {
+                    $meta.text('AI 助手 · ' + formatTime());
+                    if (!buffer) {
+                        $agentContent.text('(空回复)');
+                    }
+                }
+            }
+        }
+
+        // 解析单个 SSE 事件块：从 `event:NAME\ndata:DATA` 中提取
+        function handleSseEvent(raw, $content, $meta, setBuffer, markFirstChunk) {
+            var eventName = 'message';
+            var dataLines = [];
+            raw.split(/\r?\n/).forEach(function (line) {
+                if (line.indexOf('event:') === 0) {
+                    eventName = line.slice(6).trim();
+                } else if (line.indexOf('data:') === 0) {
+                    dataLines.push(line.slice(5).replace(/^\s/, ''));
+                }
+            });
+            var data = dataLines.join('\n');
+            if (eventName === 'meta') {
+                try {
+                    var meta = JSON.parse(data);
+                    if (meta.conversationId) { conversationId = meta.conversationId; }
+                    if (meta.modelId) { currentModelId = meta.modelId; }
+                } catch (e) { /* ignore */ }
+                return;
+            }
+            if (eventName === 'chunk') {
+                markFirstChunk();
+                var prev = $content.data('full') || '';
+                var next = prev + data;
+                $content.data('full', next);
+                setBuffer(next);
+                // 用 white-space: pre-wrap 保留换行
+                $content.text(next);
+                $('#chatMessages').scrollTop($('#chatMessages')[0].scrollHeight);
+                return;
+            }
+            if (eventName === 'error') {
+                markFirstChunk();
+                var prev2 = $content.data('full') || '';
+                var next2 = prev2 + (prev2 ? '\n' : '') + '[错误] ' + data;
+                $content.data('full', next2);
+                setBuffer(next2);
+                $content.text(next2);
+                return;
+            }
+            if (eventName === 'done') {
+                // 由 finishStream 统一收尾
+                return;
+            }
+        }
+
+        function clearChat() {
+            if (streaming) {
+                $.modal.alertWarning('请等待当前回复结束');
+                return;
+            }
+            conversationId = '';
+            $('#chatMessages').empty();
+            appendMessage('agent', '会话已清空，可以开始新的对话。');
+        }
+
+        function handleKeyDown(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        $(function () {
+            $('#queryInput').on('input', function () {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+            });
+            loadModels();
+            $('#modelSelect').on('change', function() {
+                var newId = $(this).val();
+                if (newId && newId !== currentModelId) {
+                    conversationId = '';
+                    $('#chatMessages').empty();
+                    appendMessage('agent', '已切换模型，新会话已开始。');
+                    localStorage.setItem('aiChatModelId', newId);
+                    currentModelId = newId;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

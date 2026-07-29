@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh" xmlns:th="http://www.thymeleaf.org" >
+<head>
+    <th:block th:include="include :: header('新增 LLM 模型')" />
+</head>
+<body class="white-bg">
+    <div class="wrapper wrapper-content animated fadeInRight ibox-content">
+        <form class="form-horizontal m" id="form-model-add" name="form-model-add">
+            <div class="form-group">
+                <label class="col-sm-3 control-label is-required">模型名称：</label>
+                <div class="col-sm-8">
+                    <input id="modelName" name="modelName" class="form-control" type="text" placeholder="传给 LLM 的 model 标识，如 GLM-5.1" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">模型类型：</label>
+                <div class="col-sm-8">
+                    <select id="modelType" name="modelType" class="form-control">
+                        <option value="chat">chat 对话</option>
+                        <option value="reasoning">reasoning 推理</option>
+                        <option value="embedding">embedding 嵌入</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">模型版本：</label>
+                <div class="col-sm-8">
+                    <input id="modelVersion" name="modelVersion" class="form-control" type="text" placeholder="如 5.1">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label is-required">提供方：</label>
+                <div class="col-sm-8">
+                    <input id="modelProvider" name="modelProvider" class="form-control" type="text" placeholder="AgentCore client_provider，如 OpenAI / DashScope" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label is-required">API 基地址：</label>
+                <div class="col-sm-8">
+                    <input id="apiBase" name="apiBase" class="form-control" type="text" placeholder="如 https://api.openai.com/v1" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label is-required">API Key：</label>
+                <div class="col-sm-8">
+                    <input id="apiKey" name="apiKey" class="form-control" type="password" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">SSL 校验：</label>
+                <div class="col-sm-8">
+                    <div class="radio-box">
+                        <input type="radio" id="sslNo" name="sslVerify" value="0" checked>
+                        <label for="sslNo">否</label>
+                    </div>
+                    <div class="radio-box">
+                        <input type="radio" id="sslYes" name="sslVerify" value="1">
+                        <label for="sslYes">是</label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">状态：</label>
+                <div class="col-sm-8">
+                    <div class="radio-box">
+                        <input type="radio" id="statusEnable" name="status" value="0" checked>
+                        <label for="statusEnable">启用</label>
+                    </div>
+                    <div class="radio-box">
+                        <input type="radio" id="statusDisable" name="status" value="1">
+                        <label for="statusDisable">停用</label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">设为默认：</label>
+                <div class="col-sm-8">
+                    <div class="radio-box">
+                        <input type="radio" id="defaultY" name="isDefault" value="Y">
+                        <label for="defaultY">是</label>
+                    </div>
+                    <div class="radio-box">
+                        <input type="radio" id="defaultN" name="isDefault" value="N" checked>
+                        <label for="defaultN">否</label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">显示顺序：</label>
+                <div class="col-sm-8">
+                    <input id="sortOrder" name="sortOrder" class="form-control" type="number" value="0">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">备注：</label>
+                <div class="col-sm-8">
+                    <textarea id="remark" name="remark" class="form-control"></textarea>
+                </div>
+            </div>
+        </form>
+        <div class="form-group" style="margin-top:10px;">
+            <div class="col-sm-offset-3 col-sm-8">
+                <button type="button" class="btn btn-info" onclick="testConnectForm()"><i class="fa fa-plug"></i> 测试连通</button>
+                <span class="help-block" style="display:inline-block;margin-left:8px;color:#999;">先填好以上字段，点击此按钮可在保存前验证配置</span>
+            </div>
+        </div>
+    </div>
+    <th:block th:include="include :: footer" />
+    <script type="text/javascript">
+        var prefix = ctx + "ai/models";
+
+        $("#form-model-add").validate({
+            onkeyup: false,
+            rules: {
+                modelName: {
+                    remote: {
+                        url: prefix + "/checkModelNameUnique",
+                        type: "post",
+                        dataType: "json",
+                        data: {
+                            "modelName": function() {
+                                return $.common.trim($("#modelName").val());
+                            }
+                        }
+                    }
+                },
+            },
+            messages: {
+                "modelName": {
+                    remote: "模型名称已经存在"
+                }
+            },
+            focusCleanup: true
+        });
+
+        function submitHandler() {
+            if ($.validate.form()) {
+                $.operate.save(prefix + "/add", $('#form-model-add').serialize());
+            }
+        }
+
+        /** 表单内"测试连通"：先序列化表单（不保存）发送到后端验证 */
+        function testConnectForm() {
+            var apiBase = $.common.trim($("#apiBase").val());
+            var apiKey = $.common.trim($("#apiKey").val());
+            var modelName = $.common.trim($("#modelName").val());
+            var modelProvider = $.common.trim($("#modelProvider").val());
+            if (!apiBase || !apiKey || !modelName || !modelProvider) {
+                $.modal.alertWarning("请先填写模型名称、提供方、API 基地址、API Key");
+                return;
+            }
+            $.modal.loading("正在测试连通...");
+            $.ajax({
+                url: prefix + "/testConnect",
+                type: "POST",
+                data: $('#form-model-add').serialize(),
+                success: function(resp) {
+                    $.modal.closeLoading();
+                    if (resp.code === 0) {
+                        $.modal.alertSuccess(resp.msg + "\n\n回复样例：\n" + (resp.reply || ''));
+                    } else {
+                        $.modal.alertError(resp.msg);
+                    }
+                },
+                error: function() {
+                    $.modal.closeLoading();
+                    $.modal.alertError("请求失败");
+                }
+            });
+        }
+    </script>
+</body>
+</html>
